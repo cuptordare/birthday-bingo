@@ -1,0 +1,54 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # npm always resolves github.com git dependencies (like the "localsync"
+      # dependency in package.json) to git+ssh URLs, but this runner has no
+      # SSH key. Rewrite ssh -> https so `npm ci` can clone it anonymously
+      # (local-sync is a public repo, so no token is needed).
+      - name: Use https instead of ssh for github.com git dependencies
+        run: git config --global url."https://github.com/".insteadOf ssh://git@github.com/
+
+      - run: npm ci
+
+      - run: npm run build
+        env:
+          APP_DATA_URL: ${{ secrets.APP_DATA_URL }}
+          APP_DATA_SECRET: ${{ secrets.APP_DATA_SECRET }}
+          GAME_CONTENT_KEY: ${{ secrets.GAME_CONTENT_KEY }}
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

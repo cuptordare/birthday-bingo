@@ -1,0 +1,22 @@
+{
+	"name": "birthday-bingo",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"build": "node scripts/build.mjs",
+		"dev": "node scripts/serve.mjs",
+		"encrypt-content": "node scripts/encryptContent.mjs",
+		"typecheck": "tsc -p tsconfig.json --noEmit",
+		"lint": "biome check .",
+		"lint:fix": "biome check --write ."
+	},
+	"dependencies": {
+		"localsync": "git+https://github.com/cuptordare/local-sync.git#main"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.5.1",
+		"esbuild": "^0.28.1",
+		"typescript": "^6.0.3"
+	}
+}
