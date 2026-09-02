@@ -71,7 +71,10 @@ function encrypt(plaintext, key) {
  * Encrypts every content/games/*.json into src/games/encrypted/*.json plus a
  * manifest. Requires GAME_CONTENT_KEY already set in process.env (callers
  * are responsible for loading .env first). Returns the sorted list of game
- * codes that were encrypted.
+ * codes that were encrypted, or `null` if content/games/ doesn't exist at
+ * all -- expected in CI, where that gitignored directory is never checked
+ * out; callers should fall back to whatever ciphertext is already committed
+ * in src/games/encrypted/ (see build.mjs).
  */
 export async function encryptContent() {
 	const keyB64 = process.env.GAME_CONTENT_KEY;
@@ -88,7 +91,7 @@ export async function encryptContent() {
 	}
 
 	if (!existsSync(contentDir)) {
-		throw new Error(`No content directory found at ${contentDir}`);
+		return null;
 	}
 
 	await mkdir(outDir, { recursive: true });
@@ -138,5 +141,10 @@ if (isMain) {
 		process.loadEnvFile(envPath);
 	}
 	const codes = await encryptContent();
+	if (!codes) {
+		throw new Error(
+			`No content directory found at ${contentDir}. Author at least one {CODE}.json file first (see DEPLOYMENT.md).`,
+		);
+	}
 	console.log(`Encrypted ${codes.length} game(s): ${codes.join(", ")}`);
 }

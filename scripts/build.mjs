@@ -26,14 +26,28 @@ for (const name of ["APP_DATA_URL", "APP_DATA_SECRET", "GAME_CONTENT_KEY"]) {
 	}
 }
 
-// Always re-encrypt from content/games/*.json before building, so dist/ can
-// never ship stale ciphertext after a content edit that forgot the manual
-// `npm run encrypt-content` step.
+// Re-encrypt from content/games/*.json before building, so dist/ can never
+// ship stale ciphertext after a content edit that forgot the manual
+// `npm run encrypt-content` step. That directory is gitignored plaintext, so
+// it doesn't exist in a CI checkout -- encryptContent() returns null in that
+// case, and we fall back to whatever ciphertext is already committed in
+// src/games/encrypted/ instead of failing the build.
 const encryptedGamesDir = path.join(srcDir, "games", "encrypted");
 const encryptedCodes = await encryptContent();
-console.log(
-	`Encrypted ${encryptedCodes.length} game(s): ${encryptedCodes.join(", ")}`,
-);
+if (encryptedCodes) {
+	console.log(
+		`Encrypted ${encryptedCodes.length} game(s): ${encryptedCodes.join(", ")}`,
+	);
+} else {
+	console.log(
+		"No content/games/ directory found -- using already-committed ciphertext in src/games/encrypted/.",
+	);
+	if (!existsSync(path.join(encryptedGamesDir, "manifest.json"))) {
+		throw new Error(
+			`No encrypted game content committed at ${encryptedGamesDir}. Author and encrypt at least one game first (see DEPLOYMENT.md).`,
+		);
+	}
+}
 
 await rm(distDir, { recursive: true, force: true });
 await mkdir(distDir, { recursive: true });
