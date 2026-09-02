@@ -1,12 +1,9 @@
-import { applyTheme, getStoredThemeId } from "./core/config";
 import { createAppData } from "./core/data";
 import { byId } from "./core/helpers";
 import type { RouteName } from "./core/types";
 import { Router, type View } from "./ui/router";
 import { createBoardView } from "./views/board";
 import { createHomeView } from "./views/home";
-
-applyTheme(getStoredThemeId());
 
 const data = createAppData();
 const appEl = byId("app");

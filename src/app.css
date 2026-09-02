@@ -1,14 +1,22 @@
+/* Only 4 seed colors (bg, text, primary, accent) are hand-picked; every other
+   token (surface, muted, border, primary-dark, shadow) is derived from those
+   via color-mix(), so the palette stays easy to retune from just these. */
 :root {
 	--app-bg: #f5f0ff;
-	--app-surface: #fbf8ff;
-	--app-surface-strong: #ffffff;
 	--app-text-color: #241f2f;
-	--app-muted: #6e647c;
-	--app-border: #ddd2ec;
-	--app-primary: #6200ee;
-	--app-primary-dark: #4300a3;
-	--app-accent: #b83280;
-	--app-shadow: 0 12px 28px rgba(36, 31, 47, 0.12);
+	--app-primary: #673ab7;
+	color-scheme: light;
+
+	--app-surface: color-mix(in oklch, var(--app-bg) 85%, white 15%);
+	--app-surface-strong: color-mix(in oklch, var(--app-bg) 65%, white 35%);
+	--app-muted: color-mix(in oklch, var(--app-text-color) 55%, var(--app-bg) 45%);
+	--app-border: color-mix(in oklch, var(--app-text-color) 14%, var(--app-bg) 86%);
+	--app-primary-dark: color-mix(in oklch, var(--app-primary) 78%, black 22%);
+	/* A deeper, richer shade of the brand purple itself rather than an
+	   unrelated magenta -- stays in the same hue family as --app-primary. */
+	--app-accent: color-mix(in oklch, var(--app-primary) 55%, black 45%);
+	--app-shadow: 0 12px 28px color-mix(in oklch, var(--app-text-color) 22%, transparent);
+
 	--bar-height: 58px;
 	--bottom-height: 72px;
 	font-family:
@@ -16,42 +24,6 @@
 		"Segoe UI", sans-serif;
 	color: var(--app-text-color);
 	background: var(--app-bg);
-}
-
-:root[data-theme="midnight"] {
-	--app-bg: #161320;
-	--app-surface: #1f1b2e;
-	--app-surface-strong: #241f38;
-	--app-text-color: #f1edfb;
-	--app-muted: #a99fc2;
-	--app-border: #38315090;
-	--app-primary: #9a6dff;
-	--app-primary-dark: #7a4ee0;
-	--app-accent: #ff6fa5;
-}
-
-:root[data-theme="pastel"] {
-	--app-bg: #fbfdf6;
-	--app-surface: #ffffff;
-	--app-surface-strong: #ffffff;
-	--app-text-color: #2e3a2c;
-	--app-muted: #78876f;
-	--app-border: #dcecd0;
-	--app-primary: #4f9d69;
-	--app-primary-dark: #357a4c;
-	--app-accent: #e69a5c;
-}
-
-:root[data-theme="neon"] {
-	--app-bg: #0c0a1a;
-	--app-surface: #161228;
-	--app-surface-strong: #1c1732;
-	--app-text-color: #f4f2ff;
-	--app-muted: #a89ee0;
-	--app-border: #3a2f6690;
-	--app-primary: #ff2fb0;
-	--app-primary-dark: #c4127f;
-	--app-accent: #2fe6ff;
 }
 
 * {
@@ -122,7 +94,7 @@ svg {
 	background:
 		linear-gradient(
 			180deg,
-			color-mix(in srgb, var(--app-primary) 15%, transparent),
+			color-mix(in srgb, var(--app-primary) 16%, transparent),
 			transparent 260px
 		),
 		var(--app-bg);
@@ -202,8 +174,7 @@ svg {
 	line-height: 1.05;
 }
 
-.home-subtitle,
-.home-footer {
+.home-subtitle {
 	color: var(--app-muted);
 }
 
@@ -275,15 +246,6 @@ svg {
 	border-bottom: 1px solid var(--app-border);
 }
 
-.view-title {
-	flex: 1;
-	font-weight: 800;
-	font-size: 16px;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-
 .hamburger-btn,
 .refresh-btn {
 	width: 42px;
@@ -302,12 +264,15 @@ svg {
 }
 
 .sync-status {
+	flex: 1;
 	display: flex;
 	align-items: center;
 	gap: 6px;
 	font-size: 11px;
 	color: var(--app-muted);
 	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
 .sync-indicator {
@@ -404,38 +369,6 @@ svg {
 	font-weight: 700;
 }
 
-.theme-picker {
-	padding: 10px;
-	margin-bottom: 6px;
-	border: 1px solid var(--app-border);
-	border-radius: 8px;
-}
-
-.theme-picker__label {
-	font-weight: 700;
-	font-size: 13px;
-	color: var(--app-muted);
-	margin-bottom: 8px;
-}
-
-.theme-picker__swatches {
-	display: flex;
-	gap: 10px;
-}
-
-.theme-swatch {
-	width: 32px;
-	height: 32px;
-	min-height: 32px;
-	padding: 0;
-	border-radius: 50%;
-	border: 2px solid transparent;
-}
-
-.theme-swatch[aria-pressed="true"] {
-	border-color: var(--app-text-color);
-}
-
 /* Board content */
 
 .view-content {
@@ -497,11 +430,7 @@ svg {
 .task-assigned-badge--inline {
 	position: static;
 	box-shadow: none;
-	border-radius: 999px;
-	width: auto;
-	height: auto;
-	padding: 2px 8px;
-	font-size: 11px;
+	flex: none;
 	margin-left: auto;
 }
 
@@ -509,13 +438,10 @@ svg {
 	display: grid;
 	gap: 6px;
 	margin-top: 4px;
-}
-
-.column-progress {
-	text-align: center;
-	font-size: 11px;
-	color: var(--app-muted);
-	font-weight: 700;
+	/* Grid items default to min-width:auto (won't shrink below their content's
+	   intrinsic width), which is exactly what let button.prize's icon+text
+	   overflow past a narrow column and bleed into the next one. */
+	min-width: 0;
 }
 
 button.prize {
@@ -524,8 +450,41 @@ button.prize {
 	justify-content: center;
 	gap: 6px;
 	width: 100%;
+	min-width: 0;
 	font-size: 12px;
 	background: var(--app-accent);
+	/* The locked/disabled state also carries .secondary for its faded look
+	   (see button[disabled]'s opacity), which would otherwise win the cascade
+	   for `color` (same specificity, but .secondary is declared first) and
+	   put dark ink text on this dark accent background -- pin it to white
+	   explicitly so the locked variant stays readable too. */
+	color: #fff;
+}
+
+/* Board mode's columns are only ~70px wide -- too narrow for an icon +
+   "Reveal Prize"/"Prize Locked" on one line (that's what bled into the next
+   column). List mode has plenty of width, so it keeps the roomier row
+   layout above. */
+.view-content[data-mode="board"] button.prize {
+	flex-direction: column;
+	gap: 2px;
+	min-height: 44px;
+	padding: 6px 2px;
+	font-size: 9px;
+	line-height: 1.15;
+	white-space: normal;
+	overflow-wrap: break-word;
+	text-align: center;
+}
+
+/* Host-only peek/hide toggle: a secondary action alongside the main prize
+   button, kept visually smaller so it doesn't compete for attention. */
+button.prize-toggle {
+	font-size: 12px;
+}
+
+.view-content[data-mode="board"] button.prize-toggle {
+	font-size: 9px;
 }
 
 .view-content[data-mode="list"] .column + .column {
@@ -552,6 +511,10 @@ button.prize {
 	cursor: pointer;
 }
 
+.task-message {
+	flex: 1;
+}
+
 .view-content[data-mode="list"] .task[data-completed="true"] .task-message {
 	text-decoration: line-through;
 	color: var(--app-muted);
@@ -568,10 +531,6 @@ button.prize {
 	color: var(--app-primary);
 }
 
-.task-message {
-	flex: 1;
-}
-
 /* Modals */
 
 .modal {
@@ -580,42 +539,61 @@ button.prize {
 	z-index: 50;
 	display: none;
 	background: rgba(0, 0, 0, 0.4);
-	padding: 12px;
 }
 
 .modal.show {
 	display: block;
 }
 
+/* Slides down from off-screen and sits flush against the top edge (square
+   top corners, no gap) rather than floating as a separate centered card --
+   this is the primary UX surface for the app, so it should read as an
+   extension of the title bar, not a generic dialog box. */
 .modal-shell {
 	position: absolute;
-	left: 10px;
-	right: 10px;
-	max-width: 460px;
-	margin: 0 auto;
+	left: 50%;
+	width: min(92vw, 460px);
 	background: var(--app-surface-strong);
-	border-radius: 12px;
+	border-radius: 18px;
 	box-shadow: var(--app-shadow);
 	opacity: 0;
 	transition:
-		transform 180ms ease,
-		opacity 180ms ease;
+		transform 220ms ease,
+		opacity 220ms ease;
 }
 
 .modal-shell.top {
-	top: 12px;
-	max-height: calc(100dvh - 24px);
+	top: 0;
+	border-top-left-radius: 0;
+	border-top-right-radius: 0;
+	max-height: 100dvh;
 	overflow-y: auto;
-	transform: translateY(-12px);
+	transform: translate(-50%, -100%);
 }
 
 .modal-shell.show {
 	opacity: 1;
-	transform: translateY(0);
+	transform: translate(-50%, 0);
 }
 
 .modal-content {
-	padding: 18px;
+	padding: 20px 18px calc(18px + env(safe-area-inset-bottom));
+}
+
+.alert-modal-content {
+	display: flex;
+	flex-direction: column;
+	gap: 20px;
+}
+
+
+.modal-actions {
+	display: flex;
+	gap: 10px;
+}
+
+.modal-actions button {
+	flex: 1;
 }
 
 .task-modal-content {
@@ -624,7 +602,10 @@ button.prize {
 	gap: 12px;
 }
 
-.task-modal-content .task-message {
+/* Shared card treatment: task messages inside task modals, and the
+   equivalent message in rules/prize/penalty alert modals (.modal-message). */
+.task-modal-content .task-message,
+.modal-message {
 	font-size: 16px;
 	line-height: 1.45;
 	background: var(--app-surface);
@@ -640,12 +621,15 @@ button.prize {
 	margin-bottom: 6px;
 }
 
-.assignment-control,
-.completed-by-chooser {
+.assignment-control {
 	background: var(--app-surface);
 	border: 1px solid var(--app-border);
 	border-radius: 10px;
 	padding: 10px 12px;
+}
+
+.assignment-control + .task-modal-content {
+	margin-top: 10px;
 }
 
 .task-modal-actions {
@@ -657,12 +641,8 @@ button.prize {
 	flex: 1;
 }
 
-.task-modal-close {
-	margin-top: 6px;
-	width: 100%;
-}
-
-.trivia-waiting {
+.trivia-waiting,
+.task-locked-note {
 	color: var(--app-muted);
 	font-style: italic;
 	text-align: center;

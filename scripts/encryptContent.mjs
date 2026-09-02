@@ -5,12 +5,16 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 // Authoring -> ciphertext pipeline for game content. content/games/*.json is
-// hand-authored, gitignored plaintext; this script encrypts each file with
-// GAME_CONTENT_KEY (AES-256-GCM) and writes the ciphertext to
+// hand-authored, gitignored plaintext; encryptContent() encrypts each file
+// with GAME_CONTENT_KEY (AES-256-GCM) and writes the ciphertext to
 // src/games/encrypted/*.json, which IS committed -- it's the only place game
 // content exists in the repo. See DEPLOYMENT.md and plan §2 for the full
 // rationale (this stops casual GitHub browsing, not a determined inspection
 // of the running app -- the key ships in the built client bundle too).
+//
+// Called automatically by scripts/build.mjs (so `npm run build` can never
+// ship stale ciphertext after a content edit) and also runnable standalone
+// via `npm run encrypt-content` for a quick re-encrypt without a full build.
 
 const rootDir = path.resolve(
 	path.dirname(fileURLToPath(import.meta.url)),
@@ -18,24 +22,6 @@ const rootDir = path.resolve(
 );
 const contentDir = path.join(rootDir, "content", "games");
 const outDir = path.join(rootDir, "src", "games", "encrypted");
-
-const envPath = path.join(rootDir, ".env");
-if (existsSync(envPath)) {
-	process.loadEnvFile(envPath);
-}
-
-const keyB64 = process.env.GAME_CONTENT_KEY;
-if (!keyB64) {
-	throw new Error(
-		"Missing GAME_CONTENT_KEY. Copy .env.example to .env and fill in a generated key (see DEPLOYMENT.md).",
-	);
-}
-const key = Buffer.from(keyB64, "base64");
-if (key.length !== 32) {
-	throw new Error(
-		"GAME_CONTENT_KEY must decode to exactly 32 bytes (AES-256). Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('base64'))\"",
-	);
-}
 
 function validateContent(code, content) {
 	if (!content.hostPasscode) {
@@ -66,7 +52,7 @@ function validateContent(code, content) {
 	}
 }
 
-function encrypt(plaintext) {
+function encrypt(plaintext, key) {
 	const iv = randomBytes(12);
 	const cipher = createCipheriv("aes-256-gcm", key, iv);
 	const ciphertext = Buffer.concat([
@@ -81,42 +67,76 @@ function encrypt(plaintext) {
 	};
 }
 
-if (!existsSync(contentDir)) {
-	throw new Error(`No content directory found at ${contentDir}`);
-}
+/**
+ * Encrypts every content/games/*.json into src/games/encrypted/*.json plus a
+ * manifest. Requires GAME_CONTENT_KEY already set in process.env (callers
+ * are responsible for loading .env first). Returns the sorted list of game
+ * codes that were encrypted.
+ */
+export async function encryptContent() {
+	const keyB64 = process.env.GAME_CONTENT_KEY;
+	if (!keyB64) {
+		throw new Error(
+			"Missing GAME_CONTENT_KEY. Copy .env.example to .env and fill in a generated key (see DEPLOYMENT.md).",
+		);
+	}
+	const key = Buffer.from(keyB64, "base64");
+	if (key.length !== 32) {
+		throw new Error(
+			"GAME_CONTENT_KEY must decode to exactly 32 bytes (AES-256). Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('base64'))\"",
+		);
+	}
 
-await mkdir(outDir, { recursive: true });
-const files = (await readdir(contentDir)).filter((file) =>
-	file.endsWith(".json"),
-);
+	if (!existsSync(contentDir)) {
+		throw new Error(`No content directory found at ${contentDir}`);
+	}
 
-if (files.length === 0) {
-	throw new Error(
-		`No game content found in ${contentDir}. Author at least one {CODE}.json file first.`,
+	await mkdir(outDir, { recursive: true });
+	const files = (await readdir(contentDir)).filter((file) =>
+		file.endsWith(".json"),
 	);
-}
 
-const codes = [];
-for (const file of files) {
-	const code = file.replace(/\.json$/, "");
-	const raw = await readFile(path.join(contentDir, file), "utf8");
-	const content = JSON.parse(raw);
-	content.code = code;
-	validateContent(code, content);
-	const encrypted = encrypt(JSON.stringify(content));
+	if (files.length === 0) {
+		throw new Error(
+			`No game content found in ${contentDir}. Author at least one {CODE}.json file first.`,
+		);
+	}
+
+	const codes = [];
+	for (const file of files) {
+		const code = file.replace(/\.json$/, "");
+		const raw = await readFile(path.join(contentDir, file), "utf8");
+		const content = JSON.parse(raw);
+		content.code = code;
+		validateContent(code, content);
+		const encrypted = encrypt(JSON.stringify(content), key);
+		await writeFile(
+			path.join(outDir, `${code}.json`),
+			JSON.stringify(encrypted),
+			"utf8",
+		);
+		codes.push(code);
+	}
+
+	codes.sort();
 	await writeFile(
-		path.join(outDir, `${code}.json`),
-		JSON.stringify(encrypted),
+		path.join(outDir, "manifest.json"),
+		`${JSON.stringify({ codes }, null, 2)}\n`,
 		"utf8",
 	);
-	codes.push(code);
+
+	return codes;
 }
 
-codes.sort();
-await writeFile(
-	path.join(outDir, "manifest.json"),
-	`${JSON.stringify({ codes }, null, 2)}\n`,
-	"utf8",
-);
+const isMain =
+	process.argv[1] !== undefined &&
+	path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
-console.log(`Encrypted ${codes.length} game(s): ${codes.join(", ")}`);
+if (isMain) {
+	const envPath = path.join(rootDir, ".env");
+	if (existsSync(envPath)) {
+		process.loadEnvFile(envPath);
+	}
+	const codes = await encryptContent();
+	console.log(`Encrypted ${codes.length} game(s): ${codes.join(", ")}`);
+}

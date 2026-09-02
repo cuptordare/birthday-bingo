@@ -8,11 +8,15 @@ const iconByType: Record<string, string> = {
 	ScavengerHunt: icons.scavengerHunt,
 };
 
-/** Covers Fun/Drink/Flirty/ScavengerHunt -- message + a "completed by" chooser + Complete/Not Completed. */
+/** Only these simple types make sense to hand to one specific player; ScavengerHunt is open-ended by nature. */
+const assignableTypes = new Set(["Fun", "Drink", "Flirty"]);
+
+/** Covers Fun/Drink/Flirty/ScavengerHunt -- just the message + Complete/Not Completed. */
 export function simpleTaskRenderer(type: string): TaskTypeRenderer {
 	return {
 		type,
 		icon: iconByType[type] ?? "",
+		supportsAssignment: assignableTypes.has(type),
 		renderModalBody(task, ctx, actions) {
 			const el = document.createElement("div");
 			el.className = "task-modal-content";
@@ -22,24 +26,13 @@ export function simpleTaskRenderer(type: string): TaskTypeRenderer {
 			message.textContent = task.message;
 			el.append(message);
 
-			const roster = Object.entries(ctx.game.players);
-			const chooserWrap = document.createElement("div");
-			chooserWrap.className = "completed-by-chooser";
-			const label = document.createElement("div");
-			label.className = "task-field-label";
-			label.textContent = "Completed by:";
-			const select = document.createElement("select");
-			for (const [code, name] of roster) {
-				const option = document.createElement("option");
-				option.value = code;
-				option.textContent = name;
-				select.append(option);
+			if (!ctx.canAct) {
+				const locked = document.createElement("div");
+				locked.className = "task-locked-note";
+				locked.textContent = `Only ${ctx.assignedToName ?? "the assigned player"} can mark this ${ctx.entry?.completed ? "not completed" : "complete"}.`;
+				el.append(locked);
+				return el;
 			}
-			const defaultCode =
-				ctx.entry?.completedBy ?? ctx.selfPlayerCode ?? roster[0]?.[0] ?? "";
-			select.value = defaultCode;
-			chooserWrap.append(label, select);
-			el.append(chooserWrap);
 
 			const actionsEl = document.createElement("div");
 			actionsEl.className = "task-modal-actions";
@@ -52,9 +45,7 @@ export function simpleTaskRenderer(type: string): TaskTypeRenderer {
 			} else {
 				const completeBtn = document.createElement("button");
 				completeBtn.textContent = "Complete Task";
-				completeBtn.addEventListener("click", () =>
-					actions.complete(select.value),
-				);
+				completeBtn.addEventListener("click", () => actions.complete());
 				actionsEl.append(completeBtn);
 			}
 			el.append(actionsEl);

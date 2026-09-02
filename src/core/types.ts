@@ -37,7 +37,6 @@ export interface TaskEntry {
 	kind: "task";
 	key: string;
 	completed: boolean;
-	completedBy: string | null;
 	/** Host-set override. null falls back to the task's content-authored `assignedTo`. */
 	assignedTo: string | null;
 }
@@ -85,7 +84,6 @@ export interface AppDataApi {
 		code: string,
 		key: string,
 		completed: boolean,
-		completedBy: string | null,
 	): Promise<void>;
 	setTaskAssignment(
 		code: string,
@@ -99,7 +97,11 @@ export interface AppDataApi {
 		index: number,
 		listener: (entry: ColumnEntry | undefined) => void,
 	): () => void;
-	revealColumn(code: string, index: number): Promise<void>;
+	setColumnRevealed(
+		code: string,
+		index: number,
+		revealed: boolean,
+	): Promise<void>;
 
 	sync(code: string): Promise<void>;
 	subscribeSyncActivity(

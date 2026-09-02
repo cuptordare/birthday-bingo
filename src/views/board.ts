@@ -15,6 +15,7 @@ import { getTaskTypeRenderer } from "../core/taskTypes";
 import type {
 	TaskActions,
 	TaskRenderContext,
+	TaskTypeRenderer,
 } from "../core/taskTypes/registry-types";
 import type {
 	AppDataApi,
@@ -181,11 +182,8 @@ class BoardViewImpl {
 				this.subscribeTask(key);
 				const entry = this.data.getTask(this.code, key);
 				const isCompleted = entry?.completed ?? false;
-				const assignedCode = entry?.assignedTo ?? task.assignedTo ?? null;
-				const assignedName = assignedCode
-					? (resolvePlayerName(this.game, assignedCode) ?? assignedCode)
-					: null;
 				const renderer = getTaskTypeRenderer(task.type);
+				const assignedCode = this.effectiveAssignedCode(task, entry, renderer);
 
 				colEl.append(
 					this.activeTab === "list"
@@ -194,7 +192,7 @@ class BoardViewImpl {
 								taskIndex,
 								task,
 								isCompleted,
-								assignedName,
+								assignedCode,
 								renderer.icon,
 							)
 						: this.buildBoardTask(
@@ -202,7 +200,7 @@ class BoardViewImpl {
 								taskIndex,
 								task,
 								isCompleted,
-								assignedName,
+								assignedCode,
 								renderer.icon,
 							),
 				);
@@ -221,7 +219,7 @@ class BoardViewImpl {
 		taskIndex: number,
 		task: GameTask,
 		isCompleted: boolean,
-		assignedName: string | null,
+		assignedCode: string | null,
 		rendererIcon: string,
 	): HTMLElement {
 		const taskEl = document.createElement("div");
@@ -241,7 +239,7 @@ class BoardViewImpl {
 			indexEl.textContent = `${COLUMN_LETTERS[columnIndex] ?? columnIndex + 1}${taskIndex + 1}`;
 		taskEl.append(indexEl);
 
-		if (assignedName) taskEl.append(this.buildAssignedBadge(assignedName));
+		if (assignedCode) taskEl.append(this.buildAssignedBadge(assignedCode));
 
 		return taskEl;
 	}
@@ -251,7 +249,7 @@ class BoardViewImpl {
 		taskIndex: number,
 		task: GameTask,
 		isCompleted: boolean,
-		assignedName: string | null,
+		assignedCode: string | null,
 		rendererIcon: string,
 	): HTMLElement {
 		const taskEl = document.createElement("div");
@@ -276,8 +274,8 @@ class BoardViewImpl {
 		message.textContent = task.message;
 		taskEl.append(message);
 
-		if (assignedName) {
-			const badge = this.buildAssignedBadge(assignedName);
+		if (assignedCode) {
+			const badge = this.buildAssignedBadge(assignedCode);
 			badge.classList.add("task-assigned-badge--inline");
 			taskEl.append(badge);
 		}
@@ -285,11 +283,11 @@ class BoardViewImpl {
 		return taskEl;
 	}
 
-	private buildAssignedBadge(assignedName: string): HTMLElement {
+	private buildAssignedBadge(assignedCode: string): HTMLElement {
 		const badge = document.createElement("span");
 		badge.className = "task-assigned-badge";
-		badge.textContent = assignedName.slice(0, 2).toUpperCase();
-		badge.title = `Assigned: ${assignedName}`;
+		badge.textContent = assignedCode.toUpperCase();
+		badge.title = `Assigned: ${resolvePlayerName(this.game, assignedCode) ?? assignedCode}`;
 		return badge;
 	}
 
@@ -306,34 +304,52 @@ class BoardViewImpl {
 
 		const footer = document.createElement("div");
 		footer.className = "column-footer";
-
-		const progress = document.createElement("div");
-		progress.className = "column-progress";
-		progress.textContent = `${completedCount}/${column.tasks.length} complete`;
-		footer.append(progress);
+		const progressLabel = `${completedCount} of ${column.tasks.length}`;
 
 		if (revealed) {
 			const prizeBtn = document.createElement("button");
 			prizeBtn.className = "prize";
-			prizeBtn.innerHTML = `${icon(icons.gift, 18)} See Prize`;
+			prizeBtn.innerHTML = `${icon(icons.gift, 18)} ${progressLabel}`;
 			prizeBtn.addEventListener("click", () => void showAlert(column.prize));
 			footer.append(prizeBtn);
+
+			if (this.identity.isHost) {
+				const hideBtn = document.createElement("button");
+				hideBtn.className = "secondary prize-toggle";
+				hideBtn.textContent = "Hide Prize";
+				hideBtn.addEventListener("click", () => {
+					void showConfirm("Hide this column's prize again?").then(
+						(confirmed) => {
+							if (confirmed)
+								void this.data.setColumnRevealed(this.code, columnIndex, false);
+						},
+					);
+				});
+				footer.append(hideBtn);
+			}
 		} else if (this.identity.isHost) {
 			const revealBtn = document.createElement("button");
 			revealBtn.className = "prize";
-			revealBtn.innerHTML = `${icon(icons.gift, 18)} Reveal Prize`;
+			revealBtn.innerHTML = `${icon(icons.gift, 18)} ${progressLabel}`;
 			revealBtn.addEventListener("click", () => {
 				void showConfirm("Reveal this column's prize to everyone?").then(
 					(confirmed) => {
-						if (confirmed) void this.data.revealColumn(this.code, columnIndex);
+						if (confirmed)
+							void this.data.setColumnRevealed(this.code, columnIndex, true);
 					},
 				);
 			});
 			footer.append(revealBtn);
+
+			const peekBtn = document.createElement("button");
+			peekBtn.className = "secondary prize-toggle";
+			peekBtn.textContent = "Peek";
+			peekBtn.addEventListener("click", () => void showAlert(column.prize));
+			footer.append(peekBtn);
 		} else {
 			const locked = document.createElement("button");
 			locked.className = "prize secondary";
-			locked.innerHTML = `${icon(icons.lock, 18)} Prize Locked`;
+			locked.innerHTML = `${icon(icons.lock, 18)} ${progressLabel}`;
 			locked.disabled = true;
 			footer.append(locked);
 		}
@@ -369,6 +385,16 @@ class BoardViewImpl {
 		el.className = "modal task-modal";
 		el.innerHTML = `<div class="modal-shell top"><div class="modal-content"></div></div>`;
 		return el;
+	}
+
+	/** Host override wins; falls back to content's default; null for non-assignable types (e.g. Trivia). */
+	private effectiveAssignedCode(
+		task: GameTask,
+		entry: TaskEntry | undefined,
+		renderer: TaskTypeRenderer,
+	): string | null {
+		if (renderer.supportsAssignment !== true) return null;
+		return entry?.assignedTo ?? task.assignedTo ?? null;
 	}
 
 	private buildAssignmentControl(
@@ -414,34 +440,54 @@ class BoardViewImpl {
 			modalContent.replaceChildren();
 			const entry = this.data.getTask(this.code, key);
 			const renderer = getTaskTypeRenderer(task.type);
+			const assignedCode = this.effectiveAssignedCode(task, entry, renderer);
+			const assignedToName = assignedCode
+				? (resolvePlayerName(this.game, assignedCode) ?? assignedCode)
+				: null;
+			const canAct =
+				this.identity.isHost ||
+				!assignedCode ||
+				assignedCode.toUpperCase() === this.identity.playerCode.toUpperCase();
 			const ctx: TaskRenderContext = {
 				entry,
 				isHost: this.identity.isHost,
 				game: this.game,
 				selfPlayerCode: this.identity.isHost ? null : this.identity.playerCode,
+				assignedToName,
+				canAct,
 			};
 			const actions: TaskActions = {
-				complete: (completedBy) => {
+				complete: () => {
 					void this.data
-						.setTaskCompleted(this.code, key, true, completedBy || null)
+						.setTaskCompleted(this.code, key, true)
 						.then(() => this.closeTaskModal());
 				},
 				reopen: () => {
 					void this.data
-						.setTaskCompleted(this.code, key, false, entry?.completedBy ?? null)
+						.setTaskCompleted(this.code, key, false)
 						.then(() => this.closeTaskModal());
 				},
 			};
 
-			if (this.identity.isHost)
+			if (this.identity.isHost && renderer.supportsAssignment === true)
 				modalContent.append(this.buildAssignmentControl(key, task, entry));
-			modalContent.append(renderer.renderModalBody(task, ctx, actions));
+			const body = renderer.renderModalBody(task, ctx, actions);
+			modalContent.append(body);
 
 			const closeBtn = document.createElement("button");
-			closeBtn.className = "secondary task-modal-close";
+			closeBtn.className = "secondary";
 			closeBtn.textContent = "Close";
 			closeBtn.addEventListener("click", () => this.closeTaskModal());
-			modalContent.append(closeBtn);
+
+			// Put Close alongside the renderer's primary action(s) so they sit
+			// side by side instead of Close stacking full-width underneath.
+			let actionsEl = body.querySelector<HTMLElement>(".task-modal-actions");
+			if (!actionsEl) {
+				actionsEl = document.createElement("div");
+				actionsEl.className = "task-modal-actions";
+				body.append(actionsEl);
+			}
+			actionsEl.append(closeBtn);
 		};
 
 		renderInto();

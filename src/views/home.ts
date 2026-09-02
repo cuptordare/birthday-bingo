@@ -32,18 +32,17 @@ export function createHomeView(data: AppDataApi, router: Router): View {
 					<div class="home-hero">
 						<div class="home-logo">${icon(icons.gift, 64)}</div>
 						<h1 class="home-title">${APP_NAME}</h1>
-						<p class="home-subtitle">One board. Everyone plays.</p>
+						<p class="home-subtitle">Play for prizes!</p>
 					</div>
 					<div class="home-card">
 						<form id="loginForm" class="home-form">
 							<div class="home-form__field">
 								<label for="loginCode" class="home-form__label">Enter your game code:</label>
-								<input id="loginCode" class="home-form__input" type="text" placeholder="e.g., CW40-SW" autocomplete="off" autocapitalize="characters" required />
+								<input id="loginCode" class="home-form__input" type="text" placeholder="" autocomplete="off" autocapitalize="characters" required />
 							</div>
 							<button type="submit" class="home-form__button"><span>Join Game</span>${icon(icons.arrowRight)}</button>
 						</form>
 					</div>
-					<div class="home-footer"><p>Ask your host for your game and player code.</p></div>
 				</section>
 			`;
 		},

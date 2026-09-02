@@ -29,7 +29,7 @@ const fallbackRenderer: TaskTypeRenderer = {
 		actionsEl.className = "task-modal-actions";
 		const completeBtn = document.createElement("button");
 		completeBtn.textContent = "Complete Task";
-		completeBtn.addEventListener("click", () => actions.complete(""));
+		completeBtn.addEventListener("click", () => actions.complete());
 		actionsEl.append(completeBtn);
 		el.append(actionsEl);
 		return el;

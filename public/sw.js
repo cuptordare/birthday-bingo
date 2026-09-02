@@ -1,4 +1,4 @@
-const CACHE_NAME = "birthday-bingo-v1-shell-v1";
+const CACHE_NAME = "birthday-bingo-v1-shell-v2";
 const APP_SHELL = [
 	"./",
 	"./index.html",
@@ -36,13 +36,22 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
 	if (event.request.method !== "GET") return;
 	const url = new URL(event.request.url);
-	const isAppAsset =
-		url.origin === self.location.origin &&
-		(url.pathname.endsWith("/") ||
-			url.pathname.endsWith("/index.html") ||
-			url.pathname.endsWith("/app.js") ||
-			url.pathname.endsWith("/app.css"));
-	if (isAppAsset) {
+	if (url.origin !== self.location.origin) return;
+
+	// Network-first: the app shell (must always run the latest deployed
+	// code) AND game content under ./games/encrypted/ (must always reflect
+	// the latest re-encrypted content -- a party's roster/tasks can change
+	// between visits, and cache-first would silently pin a stale copy
+	// forever with no way for a returning player to see the fix short of
+	// clearing site data). Falls back to cache only when the network fails,
+	// so a previously-loaded game still works offline.
+	const isNetworkFirst =
+		url.pathname.endsWith("/") ||
+		url.pathname.endsWith("/index.html") ||
+		url.pathname.endsWith("/app.js") ||
+		url.pathname.endsWith("/app.css") ||
+		url.pathname.includes("/games/encrypted/");
+	if (isNetworkFirst) {
 		event.respondWith(
 			fetch(event.request)
 				.then((response) => {
@@ -60,10 +69,9 @@ self.addEventListener("fetch", (event) => {
 		);
 		return;
 	}
-	// Everything else (icons, and importantly the encrypted game content
-	// JSON under ./games/encrypted/) is cache-first with network fallback,
-	// so a returning player can reload offline once the PWA has been
-	// opened at least once with connectivity.
+
+	// Everything else (favicons/manifest -- static, effectively immutable
+	// per deploy) is cache-first with network fallback.
 	event.respondWith(
 		caches.match(event.request).then((cached) => {
 			if (cached) return cached;

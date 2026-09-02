@@ -40,7 +40,7 @@ export function showAlert(
 		const modal = buildShell();
 		const content = document.createElement("div");
 		content.className = "alert-modal-content";
-		content.innerHTML = `<div>${message}</div>`;
+		content.innerHTML = `<div class="modal-message">${message}</div>`;
 		const actions = document.createElement("div");
 		actions.className = "modal-actions";
 		const button = document.createElement("button");

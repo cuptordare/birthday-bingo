@@ -1,16 +1,9 @@
 import { existsSync } from "node:fs";
-import {
-	copyFile,
-	cp,
-	mkdir,
-	readdir,
-	readFile,
-	rm,
-	writeFile,
-} from "node:fs/promises";
+import { copyFile, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as esbuild from "esbuild";
+import { encryptContent } from "./encryptContent.mjs";
 
 const rootDir = path.resolve(
 	path.dirname(fileURLToPath(import.meta.url)),
@@ -33,15 +26,14 @@ for (const name of ["APP_DATA_URL", "APP_DATA_SECRET", "GAME_CONTENT_KEY"]) {
 	}
 }
 
+// Always re-encrypt from content/games/*.json before building, so dist/ can
+// never ship stale ciphertext after a content edit that forgot the manual
+// `npm run encrypt-content` step.
 const encryptedGamesDir = path.join(srcDir, "games", "encrypted");
-if (
-	!existsSync(encryptedGamesDir) ||
-	(await readdir(encryptedGamesDir)).length === 0
-) {
-	throw new Error(
-		"No encrypted game content found in src/games/encrypted. Run `npm run encrypt-content` first (see DEPLOYMENT.md).",
-	);
-}
+const encryptedCodes = await encryptContent();
+console.log(
+	`Encrypted ${encryptedCodes.length} game(s): ${encryptedCodes.join(", ")}`,
+);
 
 await rm(distDir, { recursive: true, force: true });
 await mkdir(distDir, { recursive: true });

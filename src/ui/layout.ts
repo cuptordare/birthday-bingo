@@ -1,11 +1,9 @@
-import { APP_NAME } from "../core/config";
 import { formatRelativeTime, icon } from "../core/helpers";
 import { clearStoredIdentity } from "../core/identity";
 import type { AppDataApi, GameContent, SyncActivity } from "../core/types";
 import { icons } from "./icons";
 import { showAlert, showConfirm } from "./modal";
 import type { Router } from "./router";
-import { renderThemePicker } from "./themePicker";
 
 let activeMenu: HamburgerMenu | null = null;
 let activeTitleCleanup: (() => void) | null = null;
@@ -39,11 +37,6 @@ export function titleBar({
 	const menu = new HamburgerMenu(code, game, isHost, playerName, data, router);
 	activeMenu = menu;
 	el.append(menu.build());
-
-	const title = document.createElement("div");
-	title.className = "view-title";
-	title.textContent = `${APP_NAME} · ${code}`;
-	el.append(title);
 
 	const syncStatus = document.createElement("div");
 	syncStatus.className = "sync-status";
@@ -178,15 +171,10 @@ class HamburgerMenu {
 					<div class="user-nickname">${this.code}${this.isHost ? " · Host" : ""}</div>
 				</div>
 			</div>
-			<div class="theme-picker-slot"></div>
 			<button class="sidebar-action" data-action="rules">${icon(icons.list, 18)} View Rules</button>
 			<button class="sidebar-action" data-action="sync">${icon(icons.sync, 18)} Sync Now</button>
 			<button class="sidebar-action" data-action="switch">${icon(icons.swap, 18)} Switch Game / Player</button>
 		`;
-		const themeSlot = sidebar.querySelector(
-			".theme-picker-slot",
-		) as HTMLElement;
-		renderThemePicker(themeSlot);
 
 		sidebar.addEventListener("click", (event) => {
 			const target = event.target;

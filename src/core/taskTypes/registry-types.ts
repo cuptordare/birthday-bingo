@@ -6,10 +6,14 @@ export interface TaskRenderContext {
 	game: GameContent;
 	/** The roster code this device is signed in as, or null for a host device. */
 	selfPlayerCode: string | null;
+	/** Display name of the player this task is currently assigned to, or null if unassigned/not assignable. */
+	assignedToName: string | null;
+	/** Whether this device may complete/reopen this task: always true for the host, and for players only when the task is unassigned or assigned to them. */
+	canAct: boolean;
 }
 
 export interface TaskActions {
-	complete(completedBy: string): void;
+	complete(): void;
 	reopen(): void;
 }
 
@@ -21,6 +25,8 @@ export interface TaskActions {
 export interface TaskTypeRenderer {
 	type: string;
 	icon: string;
+	/** Whether the host can assign this task type to a specific player. Defaults to false. */
+	supportsAssignment?: boolean;
 	renderTileBadge?(task: GameTask): string | null;
 	renderModalBody(
 		task: GameTask,

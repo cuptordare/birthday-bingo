@@ -2,7 +2,10 @@ import { icons } from "../../ui/icons";
 import type { TriviaQuestion } from "../types";
 import type { TaskTypeRenderer } from "./registry-types";
 
-function buildQuiz(questions: TriviaQuestion[]): HTMLElement {
+function buildQuiz(
+	questions: TriviaQuestion[],
+	onLastAnswerRevealed: () => void,
+): HTMLElement {
 	let currentIndex = 0;
 	const el = document.createElement("div");
 	el.className = "trivia-quiz";
@@ -40,8 +43,11 @@ function buildQuiz(questions: TriviaQuestion[]): HTMLElement {
 		if (answerDiv.hidden) {
 			answerDiv.hidden = false;
 			showAnswerBtn.textContent = "Hide Answer";
-			if (currentIndex < questions.length - 1 && nextBtn)
+			if (currentIndex < questions.length - 1 && nextBtn) {
 				nextBtn.hidden = false;
+			} else {
+				onLastAnswerRevealed();
+			}
 		} else {
 			answerDiv.hidden = true;
 			showAnswerBtn.textContent = "Show Answer";
@@ -88,7 +94,9 @@ export const triviaRenderer: TaskTypeRenderer = {
 			return el;
 		}
 
-		el.append(buildQuiz(task.trivia ?? []));
+		const questions = task.trivia ?? [];
+		let enableCompleteBtn = (): void => {};
+		el.append(buildQuiz(questions, () => enableCompleteBtn()));
 
 		const actionsEl = document.createElement("div");
 		actionsEl.className = "task-modal-actions";
@@ -101,7 +109,11 @@ export const triviaRenderer: TaskTypeRenderer = {
 		} else {
 			const completeBtn = document.createElement("button");
 			completeBtn.textContent = "Mark Complete";
-			completeBtn.addEventListener("click", () => actions.complete("HOST"));
+			completeBtn.disabled = questions.length > 0;
+			enableCompleteBtn = () => {
+				completeBtn.disabled = false;
+			};
+			completeBtn.addEventListener("click", () => actions.complete());
 			actionsEl.append(completeBtn);
 		}
 		el.append(actionsEl);

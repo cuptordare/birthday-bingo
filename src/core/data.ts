@@ -154,20 +154,15 @@ export function createAppData(): AppDataApi {
 			return query.subscribe(() => listener(read()));
 		},
 
-		async setTaskCompleted(code, key, completed, completedBy) {
+		async setTaskCompleted(code, key, completed) {
 			const handle = await ensureGame(code);
 			const current: TaskEntry = readTask(handle, key) ?? {
 				kind: "task",
 				key,
 				completed: false,
-				completedBy: null,
 				assignedTo: null,
 			};
-			upsert(handle.collection, taskId(key), {
-				...current,
-				completed,
-				completedBy,
-			});
+			upsert(handle.collection, taskId(key), { ...current, completed });
 			schedulePush(handle);
 		},
 
@@ -177,7 +172,6 @@ export function createAppData(): AppDataApi {
 				kind: "task",
 				key,
 				completed: false,
-				completedBy: null,
 				assignedTo: null,
 			};
 			upsert(handle.collection, taskId(key), { ...current, assignedTo });
@@ -200,9 +194,9 @@ export function createAppData(): AppDataApi {
 			return query.subscribe(() => listener(read()));
 		},
 
-		async revealColumn(code, index) {
+		async setColumnRevealed(code, index, revealed) {
 			const handle = await ensureGame(code);
-			const entry: ColumnEntry = { kind: "column", index, revealed: true };
+			const entry: ColumnEntry = { kind: "column", index, revealed };
 			upsert(handle.collection, columnId(index), entry);
 			schedulePush(handle);
 		},
