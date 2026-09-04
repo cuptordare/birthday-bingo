@@ -1,5 +1,6 @@
 import { icons } from "../../ui/icons";
 import type { TaskTypeRenderer } from "./registry-types";
+import { secretAgendaRenderer } from "./secretAgenda";
 import { simpleTaskRenderer } from "./simpleTask";
 import { triviaRenderer } from "./trivia";
 
@@ -14,6 +15,7 @@ register(simpleTaskRenderer("Drink"));
 register(simpleTaskRenderer("Flirty"));
 register(simpleTaskRenderer("ScavengerHunt"));
 register(triviaRenderer);
+register(secretAgendaRenderer);
 
 const fallbackRenderer: TaskTypeRenderer = {
 	type: "__fallback__",

@@ -178,6 +178,40 @@ export function createAppData(): AppDataApi {
 			schedulePush(handle);
 		},
 
+		async failTaskAgenda(code, key, totalAgendas) {
+			const handle = await ensureGame(code);
+			const current: TaskEntry = readTask(handle, key) ?? {
+				kind: "task",
+				key,
+				completed: false,
+				assignedTo: null,
+			};
+			const index = current.agendaIndex ?? 0;
+			const next: TaskEntry =
+				index + 1 < totalAgendas
+					? { ...current, agendaIndex: index + 1 }
+					: { ...current, agendaExhausted: true };
+			upsert(handle.collection, taskId(key), next);
+			schedulePush(handle);
+		},
+
+		async resetTaskAgenda(code, key) {
+			const handle = await ensureGame(code);
+			const current: TaskEntry = readTask(handle, key) ?? {
+				kind: "task",
+				key,
+				completed: false,
+				assignedTo: null,
+			};
+			upsert(handle.collection, taskId(key), {
+				...current,
+				completed: false,
+				agendaIndex: 0,
+				agendaExhausted: false,
+			});
+			schedulePush(handle);
+		},
+
 		getColumn(code, index) {
 			return readColumn(games.get(code), index);
 		},

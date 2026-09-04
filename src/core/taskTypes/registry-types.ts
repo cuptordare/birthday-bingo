@@ -15,6 +15,10 @@ export interface TaskRenderContext {
 export interface TaskActions {
 	complete(): void;
 	reopen(): void;
+	/** SecretAgenda only: the assigned player got noticed -- advance to the next agenda. */
+	fail(): void;
+	/** SecretAgenda only, host-only: clear progress back to the first agenda. */
+	reset(): void;
 }
 
 /**

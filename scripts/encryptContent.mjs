@@ -35,7 +35,22 @@ function validateContent(code, content) {
 			);
 		}
 	}
-	for (const column of content.columns ?? []) {
+	content.columns?.forEach((column, columnIndex) => {
+		const taskCount = column.tasks?.length ?? 0;
+		if (taskCount === 0) {
+			throw new Error(`${code}: column ${columnIndex + 1} has no tasks`);
+		}
+		if (column.requiredToWin !== undefined) {
+			if (
+				!Number.isInteger(column.requiredToWin) ||
+				column.requiredToWin < 1 ||
+				column.requiredToWin > taskCount
+			) {
+				throw new Error(
+					`${code}: column ${columnIndex + 1} has invalid "requiredToWin" (${column.requiredToWin}) -- must be an integer between 1 and ${taskCount}`,
+				);
+			}
+		}
 		for (const task of column.tasks ?? []) {
 			if (
 				task.assignedTo &&
@@ -48,8 +63,20 @@ function validateContent(code, content) {
 					`${code}: task "assignedTo": "${task.assignedTo}" is not a key in "players"`,
 				);
 			}
+			if (task.type === "SecretAgenda") {
+				if (!task.assignedTo) {
+					throw new Error(
+						`${code}: SecretAgenda task "${task.message}" must set "assignedTo" -- it can't be left for anyone to claim`,
+					);
+				}
+				if (!Array.isArray(task.agendas) || task.agendas.length === 0) {
+					throw new Error(
+						`${code}: SecretAgenda task "${task.message}" must have a non-empty "agendas" array`,
+					);
+				}
+			}
 		}
-	}
+	});
 }
 
 function encrypt(plaintext, key) {

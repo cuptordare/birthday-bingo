@@ -10,11 +10,15 @@ export interface GameTask {
 	message: string;
 	assignedTo?: string | null;
 	trivia?: TriviaQuestion[];
+	/** SecretAgenda only: the pool of secret missions, revealed one at a time. */
+	agendas?: string[];
 }
 
 export interface GameColumn {
 	tasks: GameTask[];
 	prize: string;
+	/** Tasks that must be completed to reveal this column's prize. Defaults to every task in the column. */
+	requiredToWin?: number;
 }
 
 export interface GamePenalty {
@@ -39,6 +43,10 @@ export interface TaskEntry {
 	completed: boolean;
 	/** Host-set override. null falls back to the task's content-authored `assignedTo`. */
 	assignedTo: string | null;
+	/** SecretAgenda only: index into the task's `agendas` currently shown. Defaults to 0. */
+	agendaIndex?: number;
+	/** SecretAgenda only: true once every agenda has been failed -- only the host can act from here on. */
+	agendaExhausted?: boolean;
 }
 
 /** One synced record per column. id = `column:{colIdx}`. */
@@ -90,6 +98,14 @@ export interface AppDataApi {
 		key: string,
 		assignedTo: string | null,
 	): Promise<void>;
+	/** SecretAgenda only: advance to the next agenda, or mark exhausted if that was the last one. */
+	failTaskAgenda(
+		code: string,
+		key: string,
+		totalAgendas: number,
+	): Promise<void>;
+	/** SecretAgenda only: host-only. Clears progress back to the first agenda, not exhausted, not completed. */
+	resetTaskAgenda(code: string, key: string): Promise<void>;
 
 	getColumn(code: string, index: number): ColumnEntry | undefined;
 	subscribeColumn(

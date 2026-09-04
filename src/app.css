@@ -53,7 +53,7 @@ button {
 	background: var(--app-primary);
 	color: #fff;
 	min-height: 42px;
-	padding: 0 16px;
+	padding: 10px 16px;
 	font-weight: 700;
 	cursor: pointer;
 }
@@ -647,6 +647,28 @@ button.prize-toggle {
 	font-style: italic;
 	text-align: center;
 	padding: 12px;
+}
+
+.secret-agenda-progress {
+	font-size: 12px;
+	font-weight: 700;
+	color: var(--app-muted);
+	text-align: center;
+}
+
+.secret-agenda-current {
+	font-weight: 700;
+	line-height: 1.4;
+	background: var(--app-surface-strong);
+	border: 1px solid var(--app-border);
+	border-radius: 10px;
+	padding: 10px 12px;
+}
+
+.secret-agenda-reset button {
+	width: 100%;
+	font-size: 13px;
+	min-height: 36px;
 }
 
 .trivia-quiz {

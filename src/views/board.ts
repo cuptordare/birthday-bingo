@@ -184,6 +184,9 @@ class BoardViewImpl {
 				const isCompleted = entry?.completed ?? false;
 				const renderer = getTaskTypeRenderer(task.type);
 				const assignedCode = this.effectiveAssignedCode(task, entry, renderer);
+				const badgeCode = this.canSeeAssignedBadge(task, assignedCode)
+					? assignedCode
+					: null;
 
 				colEl.append(
 					this.activeTab === "list"
@@ -192,7 +195,7 @@ class BoardViewImpl {
 								taskIndex,
 								task,
 								isCompleted,
-								assignedCode,
+								badgeCode,
 								renderer.icon,
 							)
 						: this.buildBoardTask(
@@ -200,7 +203,7 @@ class BoardViewImpl {
 								taskIndex,
 								task,
 								isCompleted,
-								assignedCode,
+								badgeCode,
 								renderer.icon,
 							),
 				);
@@ -301,10 +304,15 @@ class BoardViewImpl {
 			(_task, taskIndex) =>
 				this.data.getTask(this.code, `${columnIndex}-${taskIndex}`)?.completed,
 		).length;
+		const requiredToWin = column.requiredToWin ?? column.tasks.length;
+		const goalMet = completedCount >= requiredToWin;
 
 		const footer = document.createElement("div");
 		footer.className = "column-footer";
-		const progressLabel = `${completedCount} of ${column.tasks.length}`;
+		const progressLabel =
+			requiredToWin === column.tasks.length
+				? `${completedCount} of ${requiredToWin}`
+				: `${completedCount} of ${requiredToWin} (${column.tasks.length} total)`;
 
 		if (revealed) {
 			const prizeBtn = document.createElement("button");
@@ -329,15 +337,21 @@ class BoardViewImpl {
 			}
 		} else if (this.identity.isHost) {
 			const revealBtn = document.createElement("button");
-			revealBtn.className = "prize";
-			revealBtn.innerHTML = `${icon(icons.gift, 18)} ${progressLabel}`;
+			revealBtn.className = goalMet ? "prize" : "prize secondary";
+			revealBtn.innerHTML = `${icon(goalMet ? icons.gift : icons.lock, 18)} ${progressLabel}`;
+			// Never actually disabled -- the host can always override and
+			// reveal early. The lock styling is just a visual nudge that the
+			// column's own goal hasn't been hit yet.
+			if (!goalMet)
+				revealBtn.title = `Only ${completedCount} of ${requiredToWin} required tasks are done. You can still reveal early.`;
 			revealBtn.addEventListener("click", () => {
-				void showConfirm("Reveal this column's prize to everyone?").then(
-					(confirmed) => {
-						if (confirmed)
-							void this.data.setColumnRevealed(this.code, columnIndex, true);
-					},
-				);
+				const prompt = goalMet
+					? "Reveal this column's prize to everyone?"
+					: `Only ${completedCount} of ${requiredToWin} required tasks are done. Reveal the prize early anyway?`;
+				void showConfirm(prompt).then((confirmed) => {
+					if (confirmed)
+						void this.data.setColumnRevealed(this.code, columnIndex, true);
+				});
 			});
 			footer.append(revealBtn);
 
@@ -395,6 +409,24 @@ class BoardViewImpl {
 	): string | null {
 		if (renderer.supportsAssignment !== true) return null;
 		return entry?.assignedTo ?? task.assignedTo ?? null;
+	}
+
+	/**
+	 * SecretAgenda hides *who* it's assigned to from everyone but the host
+	 * and that player -- showing the badge to the whole table would let them
+	 * watch the assigned player and defeat the "without anyone noticing"
+	 * mechanic. Every other assignable type shows it to all, same as always.
+	 */
+	private canSeeAssignedBadge(
+		task: GameTask,
+		assignedCode: string | null,
+	): boolean {
+		if (!assignedCode) return false;
+		if (task.type !== "SecretAgenda") return true;
+		return (
+			this.identity.isHost ||
+			assignedCode.toUpperCase() === this.identity.playerCode.toUpperCase()
+		);
 	}
 
 	private buildAssignmentControl(
@@ -466,6 +498,17 @@ class BoardViewImpl {
 					void this.data
 						.setTaskCompleted(this.code, key, false)
 						.then(() => this.closeTaskModal());
+				},
+				fail: () => {
+					// Unlike complete/reopen, this doesn't end the task -- it
+					// just moves to the next agenda, so keep the modal open
+					// and re-render it in place instead of closing.
+					void this.data
+						.failTaskAgenda(this.code, key, task.agendas?.length ?? 0)
+						.then(() => renderInto());
+				},
+				reset: () => {
+					void this.data.resetTaskAgenda(this.code, key).then(() => renderInto());
 				},
 			};
 
