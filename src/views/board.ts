@@ -304,15 +304,11 @@ class BoardViewImpl {
 			(_task, taskIndex) =>
 				this.data.getTask(this.code, `${columnIndex}-${taskIndex}`)?.completed,
 		).length;
-		const requiredToWin = column.requiredToWin ?? column.tasks.length;
-		const goalMet = completedCount >= requiredToWin;
+		const goalMet = completedCount >= column.tasks.length;
 
 		const footer = document.createElement("div");
 		footer.className = "column-footer";
-		const progressLabel =
-			requiredToWin === column.tasks.length
-				? `${completedCount} of ${requiredToWin}`
-				: `${completedCount} of ${requiredToWin} (${column.tasks.length} total)`;
+		const progressLabel = `${completedCount} of ${column.tasks.length}`;
 
 		if (revealed) {
 			const prizeBtn = document.createElement("button");
@@ -343,11 +339,11 @@ class BoardViewImpl {
 			// reveal early. The lock styling is just a visual nudge that the
 			// column's own goal hasn't been hit yet.
 			if (!goalMet)
-				revealBtn.title = `Only ${completedCount} of ${requiredToWin} required tasks are done. You can still reveal early.`;
+				revealBtn.title = `Only ${completedCount} of ${column.tasks.length} tasks are done. You can still reveal early.`;
 			revealBtn.addEventListener("click", () => {
 				const prompt = goalMet
 					? "Reveal this column's prize to everyone?"
-					: `Only ${completedCount} of ${requiredToWin} required tasks are done. Reveal the prize early anyway?`;
+					: `Only ${completedCount} of ${column.tasks.length} tasks are done. Reveal the prize early anyway?`;
 				void showConfirm(prompt).then((confirmed) => {
 					if (confirmed)
 						void this.data.setColumnRevealed(this.code, columnIndex, true);

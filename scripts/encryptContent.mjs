@@ -40,17 +40,6 @@ function validateContent(code, content) {
 		if (taskCount === 0) {
 			throw new Error(`${code}: column ${columnIndex + 1} has no tasks`);
 		}
-		if (column.requiredToWin !== undefined) {
-			if (
-				!Number.isInteger(column.requiredToWin) ||
-				column.requiredToWin < 1 ||
-				column.requiredToWin > taskCount
-			) {
-				throw new Error(
-					`${code}: column ${columnIndex + 1} has invalid "requiredToWin" (${column.requiredToWin}) -- must be an integer between 1 and ${taskCount}`,
-				);
-			}
-		}
 		for (const task of column.tasks ?? []) {
 			if (
 				task.assignedTo &&

@@ -17,8 +17,6 @@ export interface GameTask {
 export interface GameColumn {
 	tasks: GameTask[];
 	prize: string;
-	/** Tasks that must be completed to reveal this column's prize. Defaults to every task in the column. */
-	requiredToWin?: number;
 }
 
 export interface GamePenalty {
