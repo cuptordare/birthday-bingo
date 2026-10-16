@@ -54,6 +54,8 @@ export function titleBar({
 		);
 		if (!activity.online) textEl.textContent = "Offline";
 		else if (activity.phase === "syncing") textEl.textContent = "Syncing…";
+		else if (activity.phase === "error")
+			textEl.textContent = "Sync failed -- will retry";
 		else if (activity.lastSyncedAt)
 			textEl.textContent = `Synced ${formatRelativeTime(activity.lastSyncedAt)}`;
 		else textEl.textContent = "Not synced yet";

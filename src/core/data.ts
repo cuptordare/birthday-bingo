@@ -1,10 +1,7 @@
 import {
-	type Collection,
-	createIndexedDBAdapter,
 	createLocalSyncApp,
-	createNetworkStatus,
-	createSyncEngine,
-	type SyncEngine,
+	type KeyValueStore,
+	type SyncState,
 } from "localsync";
 import { loadGameContent } from "./gameContent";
 import { createGoogleSheetsSyncAdapter } from "./googleSheetsSyncAdapter";
@@ -16,110 +13,69 @@ import type {
 	TaskEntry,
 } from "./types";
 
-const pushDebounceMs = 900;
 const backgroundSyncIntervalMs = 10 * 60 * 1000;
 
-function taskId(key: string): string {
-	return `task:${key}`;
-}
+const taskId = (key: string) => `task:${key}`;
+const columnId = (index: number) => `column:${index}`;
 
-function columnId(index: number): string {
-	return `column:${index}`;
-}
+const asTask = (entry: BoardEntry | undefined): TaskEntry | undefined =>
+	entry?.kind === "task" ? entry : undefined;
+const asColumn = (entry: BoardEntry | undefined): ColumnEntry | undefined =>
+	entry?.kind === "column" ? entry : undefined;
 
-function upsert<T extends object>(
-	collection: Collection<T>,
-	id: string,
-	data: T,
-): void {
-	if (collection.peek(id)) collection.replace(id, data);
-	else collection.insert(data, { id });
-}
+const newTask = (key: string): TaskEntry => ({
+	kind: "task",
+	key,
+	completed: false,
+	assignedTo: null,
+});
 
-interface GameHandle {
-	collection: Collection<BoardEntry>;
-	engine: SyncEngine;
-	pushTimer: ReturnType<typeof setTimeout> | undefined;
-	activityListeners: Set<(activity: SyncActivity) => void>;
-}
+const toActivity = (state: SyncState): SyncActivity => ({
+	phase: state.phase,
+	online: state.online,
+	pending: state.pending,
+	lastSyncedAt: state.lastSyncedAt,
+});
 
 /**
- * Games are joined lazily (one localsync collection + one SyncEngine per
- * game code, created on login, not eagerly for every known code at boot) --
- * a device only ever cares about the party it's attending, so there's no
- * reason to poll every other game's backend row. See plan §3a.
+ * Games are joined lazily (one synced key-value store per game code, created on
+ * login, not eagerly for every known code at boot) -- a device only ever cares
+ * about the party it's attending, so there's no reason to poll every other
+ * game's backend row. See plan §3a.
  */
 export function createAppData(): AppDataApi {
 	const app = createLocalSyncApp({
-		storage: createIndexedDBAdapter({ databaseName: "birthday-bingo-v1" }),
-		onError(error) {
-			console.error("Local Sync persistence error", error);
+		name: "birthday-bingo-v1",
+		onError(error, info) {
+			console.error(
+				`Local Sync ${info.source} error (${info.collection})`,
+				error,
+			);
 		},
 	});
-	const network = createNetworkStatus();
-	const games = new Map<string, GameHandle>();
+	const games = new Map<string, KeyValueStore<BoardEntry>>();
 
-	function emitActivity(code: string): void {
-		const handle = games.get(code);
-		if (!handle) return;
-		const state = handle.engine.getState();
-		const activity: SyncActivity = {
-			phase: state.phase,
-			online: state.online,
-			pending: state.pending,
-			lastSyncedAt: state.lastSyncedAt,
-		};
-		for (const listener of handle.activityListeners) listener(activity);
-	}
-
-	async function ensureGame(code: string): Promise<GameHandle> {
-		const existing = games.get(code);
-		if (existing) return existing;
-
-		const collection = app.collection<BoardEntry>(`board_${code}`);
-		await collection.ready;
-		const engine = createSyncEngine({
-			collection,
-			adapter: createGoogleSheetsSyncAdapter<BoardEntry>(`board:${code}`),
-			network,
-			purgeDeletedOnPush: true,
-		});
-		const handle: GameHandle = {
-			collection,
-			engine,
-			pushTimer: undefined,
-			activityListeners: new Set(),
-		};
-		games.set(code, handle);
-		engine.status.subscribe(() => emitActivity(code));
-		engine.start({ intervalMs: backgroundSyncIntervalMs, syncOnStart: true });
-		return handle;
-	}
-
-	function schedulePush(handle: GameHandle): void {
-		if (handle.pushTimer !== undefined) window.clearTimeout(handle.pushTimer);
-		handle.pushTimer = window.setTimeout(() => {
-			handle.pushTimer = undefined;
-			void handle.engine.push().catch((error: unknown) => {
-				console.error("push error", error);
+	async function ensureGame(code: string): Promise<KeyValueStore<BoardEntry>> {
+		let board = games.get(code);
+		if (board === undefined) {
+			board = app.keyValue<BoardEntry>(`board_${code}`, {
+				remote: createGoogleSheetsSyncAdapter<BoardEntry>(`board:${code}`),
+				syncIntervalMs: backgroundSyncIntervalMs,
+				pushDebounceMs: 900,
 			});
-		}, pushDebounceMs);
+			games.set(code, board);
+		}
+		await board.ready;
+		return board;
 	}
 
-	function readTask(
-		handle: GameHandle | undefined,
+	async function updateTask(
+		code: string,
 		key: string,
-	): TaskEntry | undefined {
-		const data = handle?.collection.peek(taskId(key))?.data;
-		return data?.kind === "task" ? data : undefined;
-	}
-
-	function readColumn(
-		handle: GameHandle | undefined,
-		index: number,
-	): ColumnEntry | undefined {
-		const data = handle?.collection.peek(columnId(index))?.data;
-		return data?.kind === "column" ? data : undefined;
+		change: (task: TaskEntry) => TaskEntry,
+	): Promise<void> {
+		const board = await ensureGame(code);
+		board.update(taskId(key), (entry) => change(asTask(entry) ?? newTask(key)));
 	}
 
 	return {
@@ -132,17 +88,12 @@ export function createAppData(): AppDataApi {
 		},
 
 		getTask(code, key) {
-			return readTask(games.get(code), key);
+			return asTask(games.get(code)?.get(taskId(key)));
 		},
 
 		subscribeTask(code, key, listener) {
-			const handle = games.get(code);
-			if (!handle) return () => {};
-			const query = handle.collection.get(taskId(key));
-			const read = () => {
-				const data = query.getCurrentResult()?.data;
-				return data?.kind === "task" ? data : undefined;
-			};
+			const board = games.get(code);
+			if (!board) return () => {};
 			// Deliberately does NOT fire `listener` immediately with the current
 			// value (unlike family-pantry's subscribe*Data helpers) -- callers
 			// here (board.ts) always read the current value via getTask/getColumn
@@ -151,98 +102,63 @@ export function createAppData(): AppDataApi {
 			// board.ts rebuilds its whole subscription set on every render, so an
 			// immediate callback would trigger another render from inside the
 			// render that created it.
-			return query.subscribe(() => listener(read()));
+			return board.watch(taskId(key), (entry) => listener(asTask(entry)), {
+				immediate: false,
+			});
 		},
 
-		async setTaskCompleted(code, key, completed) {
-			const handle = await ensureGame(code);
-			const current: TaskEntry = readTask(handle, key) ?? {
-				kind: "task",
-				key,
-				completed: false,
-				assignedTo: null,
-			};
-			upsert(handle.collection, taskId(key), { ...current, completed });
-			schedulePush(handle);
-		},
+		setTaskCompleted: (code, key, completed) =>
+			updateTask(code, key, (task) => ({ ...task, completed })),
 
-		async setTaskAssignment(code, key, assignedTo) {
-			const handle = await ensureGame(code);
-			const current: TaskEntry = readTask(handle, key) ?? {
-				kind: "task",
-				key,
-				completed: false,
-				assignedTo: null,
-			};
-			upsert(handle.collection, taskId(key), { ...current, assignedTo });
-			schedulePush(handle);
-		},
+		setTaskAssignment: (code, key, assignedTo) =>
+			updateTask(code, key, (task) => ({ ...task, assignedTo })),
 
-		async failTaskAgenda(code, key, totalAgendas) {
-			const handle = await ensureGame(code);
-			const current: TaskEntry = readTask(handle, key) ?? {
-				kind: "task",
-				key,
-				completed: false,
-				assignedTo: null,
-			};
-			const index = current.agendaIndex ?? 0;
-			const next: TaskEntry =
-				index + 1 < totalAgendas
-					? { ...current, agendaIndex: index + 1 }
-					: { ...current, agendaExhausted: true };
-			upsert(handle.collection, taskId(key), next);
-			schedulePush(handle);
-		},
+		failTaskAgenda: (code, key, totalAgendas) =>
+			updateTask(code, key, (task) => {
+				const index = task.agendaIndex ?? 0;
+				return index + 1 < totalAgendas
+					? { ...task, agendaIndex: index + 1 }
+					: { ...task, agendaExhausted: true };
+			}),
 
-		async resetTaskAgenda(code, key) {
-			const handle = await ensureGame(code);
-			const current: TaskEntry = readTask(handle, key) ?? {
-				kind: "task",
-				key,
-				completed: false,
-				assignedTo: null,
-			};
-			upsert(handle.collection, taskId(key), {
-				...current,
+		resetTaskAgenda: (code, key) =>
+			updateTask(code, key, (task) => ({
+				...task,
 				completed: false,
 				agendaIndex: 0,
 				agendaExhausted: false,
-			});
-			schedulePush(handle);
-		},
+			})),
 
 		getColumn(code, index) {
-			return readColumn(games.get(code), index);
+			return asColumn(games.get(code)?.get(columnId(index)));
 		},
 
 		subscribeColumn(code, index, listener) {
-			const handle = games.get(code);
-			if (!handle) return () => {};
-			const query = handle.collection.get(columnId(index));
-			const read = () => {
-				const data = query.getCurrentResult()?.data;
-				return data?.kind === "column" ? data : undefined;
-			};
+			const board = games.get(code);
+			if (!board) return () => {};
 			// See subscribeTask's comment: no immediate synchronous callback.
-			return query.subscribe(() => listener(read()));
+			return board.watch(
+				columnId(index),
+				(entry) => listener(asColumn(entry)),
+				{
+					immediate: false,
+				},
+			);
 		},
 
 		async setColumnRevealed(code, index, revealed) {
-			const handle = await ensureGame(code);
-			const entry: ColumnEntry = { kind: "column", index, revealed };
-			upsert(handle.collection, columnId(index), entry);
-			schedulePush(handle);
+			const board = await ensureGame(code);
+			board.set(columnId(index), { kind: "column", index, revealed });
 		},
 
 		async sync(code) {
-			const handle = await ensureGame(code);
-			await handle.engine.sync();
+			const board = await ensureGame(code);
+			await board.engine?.sync();
 		},
 
 		subscribeSyncActivity(code, listener) {
-			const handle = games.get(code);
-			if (!handle) {
+			const engine = games.get(code)?.engine;
+			if (!engine) {
 				listener({
 					phase: "idle",
 					online: true,
@@ -251,11 +167,8 @@ export function createAppData(): AppDataApi {
 				});
 				return () => {};
 			}
-			handle.activityListeners.add(listener);
-			emitActivity(code);
-			return () => {
-				handle.activityListeners.delete(listener);
-			};
+			listener(toActivity(engine.getState()));
+			return engine.status.subscribe((state) => listener(toActivity(state)));
 		},
 	};
 }

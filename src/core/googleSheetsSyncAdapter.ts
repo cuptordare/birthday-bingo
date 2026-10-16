@@ -1,9 +1,5 @@
-import type { Mutation, RecordEnvelope, SyncAdapter } from "localsync";
+import { type BlobSnapshot, createBlobSyncAdapter } from "localsync";
 import { APP_DATA_SECRET, APP_DATA_URL } from "./secrets";
-
-interface RemotePayload<T extends object> {
-	records: RecordEnvelope<T>[];
-}
 
 // v1: schema-version marker for the BoardEntry shape, independent of the
 // game `collection` segment. Bump this (and the IndexedDB database name in
@@ -12,28 +8,24 @@ interface RemotePayload<T extends object> {
 // data, and the old versioned row is simply abandoned, not migrated. Same
 // approach the original Birthday Bingo used for its own `:v2` localStorage
 // keys.
+//
+// `:lww` rows hold the library's current storage format; the `:records` rows (its old
+// format) are only read, to import them once, and are otherwise left as they were -- a
+// backup, and still what an old app version reads and writes.
 function remoteKey(collection: string): string {
+	return `birthdayBingo:v1:${collection}:lww`;
+}
+
+function legacyRemoteKey(collection: string): string {
 	return `birthdayBingo:v1:${collection}:records`;
 }
 
-function asRemote<T extends object>(
-	record: RecordEnvelope<T>,
-): RecordEnvelope<T> {
-	return {
-		...record,
-		meta: {
-			...record.meta,
-			dirty: false,
-			source: "remote",
-		},
-	};
-}
-
-async function sheetsRequest<T>(
+async function sheetsRequest(
 	action: "get" | "set",
 	id: string,
-	data?: T,
-): Promise<T | null> {
+	data?: unknown,
+	ifMatch?: string,
+): Promise<unknown> {
 	const response = await fetch(APP_DATA_URL, {
 		method: "POST",
 		body: JSON.stringify({
@@ -41,67 +33,48 @@ async function sheetsRequest<T>(
 			action,
 			id,
 			data,
+			ifMatch,
 		}),
 	});
-
 	if (!response.ok) {
 		throw new Error(`Google Sheets request failed: ${response.status}`);
 	}
-
-	return (await response.json()) as T | null;
-}
-
-async function readRemote<T extends object>(
-	collection: string,
-): Promise<RecordEnvelope<T>[]> {
-	const payload = await sheetsRequest<RemotePayload<T> | RecordEnvelope<T>[]>(
-		"get",
-		remoteKey(collection),
-	);
-	if (payload === null) return [];
-	if (Array.isArray(payload)) return payload.map(asRemote);
-	return (payload.records ?? []).map(asRemote);
-}
-
-async function writeRemote<T extends object>(
-	collection: string,
-	records: RecordEnvelope<T>[],
-): Promise<void> {
-	await sheetsRequest("set", remoteKey(collection), { records });
+	const body: unknown = await response.json();
+	// The Apps Script reports exceptions (e.g. a lock timeout) as a 200 with { error }:
+	// treat that as a failure, never as data or as a successful save.
+	if (typeof body === "object" && body !== null && "error" in body) {
+		throw new Error(`Google Sheets ${action} failed: ${String(body.error)}`);
+	}
+	return body;
 }
 
 /**
- * One adapter instance per game code (`collection` = `board:{code}`), so
- * each game gets its own spreadsheet row. Within that collection, records
- * are per-task/per-column (see types.ts BoardEntry) -- this adapter's
- * read-modify-write push (re-fetch remote, overwrite only the mutated
- * record ids, write the merged array back) is what makes concurrent
- * players completing different tasks safe: see plan §3a.
+ * One adapter per game code (`collection` = `board:{code}`), so each game gets its own
+ * spreadsheet row holding all of that game's per-task/per-column records. The library merges
+ * every save with what's in the row, per record (so players completing different tasks don't
+ * overwrite each other; for the same task, changes to different fields are both kept, and
+ * only the same field set two ways goes to the later change). The Apps Script keeps an
+ * etag per row and refuses a write whose `ifMatch` is stale, so two pushes landing at the
+ * same moment can't erase each other.
  */
 export function createGoogleSheetsSyncAdapter<T extends object>(
 	collection: string,
-): SyncAdapter<T> {
-	return {
-		async pull() {
-			return { records: await readRemote<T>(collection) };
+) {
+	return createBlobSyncAdapter<T>({
+		read: async () =>
+			(await sheetsRequest(
+				"get",
+				remoteKey(collection),
+			)) as BlobSnapshot<T> | null,
+		write: async (blob, { ifMatch }) => {
+			const result = (await sheetsRequest(
+				"set",
+				remoteKey(collection),
+				blob,
+				ifMatch,
+			)) as { conflict?: boolean } | null;
+			return result?.conflict === true ? { conflict: true } : undefined;
 		},
-
-		async push(mutations: Mutation<T>[]) {
-			const current = new Map(
-				(await readRemote<T>(collection)).map((record) => [record.id, record]),
-			);
-			const acked: string[] = [];
-			const records: RecordEnvelope<T>[] = [];
-
-			for (const mutation of mutations) {
-				const authoritative = asRemote(mutation.record);
-				current.set(mutation.recordId, authoritative);
-				acked.push(mutation.mutationId);
-				records.push(authoritative);
-			}
-
-			await writeRemote(collection, [...current.values()]);
-			return { acked, records };
-		},
-	};
+		legacy: { read: () => sheetsRequest("get", legacyRemoteKey(collection)) },
+	});
 }
